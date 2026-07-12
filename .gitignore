@@ -29,3 +29,6 @@ htmlcov/
 # Operating System
 .DS_Store
 Thumbs.db
+reports/
+uploads/
+db_config.py/
