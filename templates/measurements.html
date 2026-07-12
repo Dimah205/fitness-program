@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fitness AI - Progress Tracking</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    {% include 'navbar.html' %}
+
+    <div class="container">
+        <h1>📊 Progress Tracking</h1>
+        <p>View your body measurements history and progress charts</p>
+
+        <!-- Progress Summary -->
+        <div class="card" id="progress-summary-card">
+            <h2>📈 Progress Summary</h2>
+            <div id="progress-summary">
+                <p style="text-align:center; color:#999;">Loading summary...</p>
+            </div>
+        </div>
+
+        <!-- Measurements Chart -->
+        <div class="card" id="chart-card">
+            <h2>📉 Body Measurements Over Time</h2>
+            <div style="width: 100%; min-height: 400px;">
+                <canvas id="measurements-chart"></canvas>
+            </div>
+            <p id="no-data-message" style="text-align:center; color:#999; display:none;">
+                No measurement data yet. Go to <a href="/setup">Setup</a> to add your measurements.
+            </p>
+        </div>
+
+        <!-- Measurement History -->
+        <div class="card">
+            <h2>📋 Measurement History</h2>
+            <div id="measurements-list">
+                <p style="text-align:center; color:#999;">Loading...</p>
+            </div>
+        </div>
+
+        <!-- Export Report Button -->
+        <div class="card" style="text-align: center;">
+            <button onclick="generateReport()" class="btn-primary" style="width: auto; padding: 15px 40px;">
+                📄 Export Complete Progress Report (PDF)
+            </button>
+        </div>
+
+        <!-- Note -->
+        <div class="card" style="background: #fff3cd; text-align: center;">
+            <p>💡 <strong>Note:</strong> To add or update your measurements, please go to the <a href="/setup">Setup page</a>.</p>
+        </div>
+    </div>
+
+    <script>
+        let measurementsChart = null;
+
+        async function loadMeasurements() {
+            try {
+                const result = await fetch('/api/measurements/progress', { credentials: 'include' });
+                const data = await result.json();
+
+                if (data.success && data.summary) {
+                    renderSummary(data.summary);
+                }
+
+                if (data.success && data.measurements && data.measurements.length > 0) {
+                    document.getElementById('no-data-message').style.display = 'none';
+                    drawChart(data.measurements);
+                } else {
+                    document.getElementById('no-data-message').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading progress:', error);
+            }
+
+            try {
+                const historyResult = await fetch('/api/measurements', { credentials: 'include' });
+                const history = await historyResult.json();
+                const list = document.getElementById('measurements-list');
+
+                if (history.success && history.data && history.data.length > 0) {
+                    list.innerHTML = history.data.slice().reverse().map(m => `
+                        <div class="history-item">
+                            <span class="history-day">⚖️ ${m.weight} kg</span>
+                            <span style="color:#999;">
+                                Chest: ${m.chest || '-'} | Waist: ${m.waist || '-'} | Hips: ${m.hips || '-'}
+                                ${m.arms ? `| Arms: ${m.arms}` : ''} ${m.thighs ? `| Thighs: ${m.thighs}` : ''}
+                            </span>
+                            <span class="history-date">${formatDate(m.recorded_date)}</span>
+                        </div>
+                    `).join('');
+                } else {
+                    list.innerHTML = '<p style="text-align:center; color:#999;">No measurements yet. Go to <a href="/setup">Setup</a> to add your first measurement.</p>';
+                }
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+
+        function renderSummary(summary) {
+            const container = document.getElementById('progress-summary');
+            if (!container) return;
+
+            container.innerHTML = `
+                <div class="form-row">
+                    <div style="flex:1; text-align:center; background:#f8f9fa; padding:15px; border-radius:12px;">
+                        <h3 style="color:#667eea; font-size:1.8em;">${summary.weight?.current || '0'} kg</h3>
+                        <p>Current Weight</p>
+                        <small>${summary.weight?.change?.direction === 'lost' ? `📉 Lost ${Math.abs(summary.weight.change.absolute_change)} kg` :
+                                  summary.weight?.change?.direction === 'gained' ? `📈 Gained ${summary.weight.change.absolute_change} kg` :
+                                  '➡️ Stable'}</small>
+                    </div>
+                    <div style="flex:1; text-align:center; background:#f8f9fa; padding:15px; border-radius:12px;">
+                        <h3 style="color:#667eea; font-size:1.8em;">${summary.bmi?.bmi || '0'}</h3>
+                        <p>BMI (${summary.bmi?.category || 'N/A'})</p>
+                    </div>
+                    <div style="flex:1; text-align:center; background:#f8f9fa; padding:15px; border-radius:12px;">
+                        <h3 style="color:#667eea; font-size:1.8em;">${summary.total_measurements || 0}</h3>
+                        <p>Total Measurements</p>
+                        <small>📅 ${formatDate(summary.first_date)} - ${formatDate(summary.latest_date)}</small>
+                    </div>
+                </div>
+            `;
+        }
+
+        function drawChart(data) {
+            const ctx = document.getElementById('measurements-chart').getContext('2d');
+            if (!ctx) return;
+            if (measurementsChart) measurementsChart.destroy();
+
+            const dates = data.map(d => d.recorded_date.length > 10 ? d.recorded_date.substring(0, 10) : d.recorded_date);
+            const datasets = [];
+
+            const weights = data.map(d => d.weight);
+            if (weights.some(w => w !== null)) {
+                datasets.push({ label: 'Weight (kg)', data: weights, borderColor: '#667eea', backgroundColor: 'rgba(102,126,234,0.1)', tension: 0.3, fill: true });
+            }
+
+            const chests = data.map(d => d.chest);
+            if (chests.some(c => c !== null)) {
+                datasets.push({ label: 'Chest (cm)', data: chests, borderColor: '#e74c3c', backgroundColor: 'rgba(231,76,60,0.1)', tension: 0.3, fill: true });
+            }
+
+            const waists = data.map(d => d.waist);
+            if (waists.some(w => w !== null)) {
+                datasets.push({ label: 'Waist (cm)', data: waists, borderColor: '#2ecc71', backgroundColor: 'rgba(46,204,113,0.1)', tension: 0.3, fill: true });
+            }
+
+            const hips = data.map(d => d.hips);
+            if (hips.some(h => h !== null)) {
+                datasets.push({ label: 'Hips (cm)', data: hips, borderColor: '#f39c12', backgroundColor: 'rgba(243,156,18,0.1)', tension: 0.3, fill: true });
+            }
+
+            const arms = data.map(d => d.arms);
+            if (arms.some(a => a !== null)) {
+                datasets.push({ label: 'Arms (cm)', data: arms, borderColor: '#9b59b6', backgroundColor: 'rgba(155,89,182,0.1)', tension: 0.3, fill: true });
+            }
+
+            const thighs = data.map(d => d.thighs);
+            if (thighs.some(t => t !== null)) {
+                datasets.push({ label: 'Thighs (cm)', data: thighs, borderColor: '#1abc9c', backgroundColor: 'rgba(26,188,156,0.1)', tension: 0.3, fill: true });
+            }
+
+            measurementsChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels: dates, datasets: datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { legend: { position: 'top', labels: { usePointStyle: true } } }
+                }
+            });
+        }
+
+        async function generateReport() {
+            try {
+                const response = await fetch('/api/report/generate', { method: 'POST', credentials: 'include' });
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'fitness_report.pdf';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                } else {
+                    alert('Error generating report');
+                }
+            } catch (error) {
+                console.error('Report error:', error);
+                alert('Error generating report');
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadMeasurements);
+        window.generateReport = generateReport;
+    </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+flask
+flask-cors
+twilio
+mysql-connector-python
+bcrypt
+pdfplumber
+python-dotenv
+reportlab
+matplotlib

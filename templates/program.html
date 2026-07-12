@@ -1,0 +1,40 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fitness AI - My Program</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    {% include 'navbar.html' %}
+
+    <div class="container">
+        <h1><i class="fas fa-dumbbell"></i> My Fitness Program</h1>
+
+        <div id="program-loading" class="loading">
+            <div class="loading-spinner"></div>
+            <p>Loading your personalized program...</p>
+        </div>
+
+        <div id="program-content" class="hidden">
+            <div id="program-details"></div>
+            <div id="workouts-grid"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+        // Make submitVerification globally available
+        window.submitVerification = function() {
+            if (window.programManager && window.programManager.workoutVerification) {
+                window.programManager.workoutVerification.submitVerification();
+            } else if (window.workoutVerification) {
+                window.workoutVerification.submitVerification();
+            }
+        };
+    </script>
+</body>
+</html>

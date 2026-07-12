@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fitness AI - Setup & Measurements</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    {% include 'navbar.html' %}
+
+    <div class="container">
+        <h1>⚙️ Setup & Health Data</h1>
+        <p>Update your health data and generate a new personalized program</p>
+
+        <div class="card">
+            <h2>📄 Step 1: Upload e-Nabız Report (PDF)</h2>
+            <form id="pdf-form">
+                <div class="form-group">
+                    <label>Upload PDF File</label>
+                    <input type="file" id="pdf-file" accept=".pdf">
+                    <button type="button" id="extract-pdf-btn" class="btn-secondary" style="margin-top: 10px;">
+                        📄 Extract Data from PDF
+                    </button>
+                </div>
+                <div id="pdf-extract-status" style="margin-top: 8px; font-size: 0.9em;"></div>
+            </form>
+
+            <h2 style="margin-top: 30px;">📊 Step 2: Health Measurements</h2>
+            <form id="measurements-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Heart Rate (bpm)</label>
+                        <input type="number" id="heart-rate" step="1" placeholder="75">
+                    </div>
+                    <div class="form-group">
+                        <label>Weight (kg)</label>
+                        <input type="number" id="weight" step="0.1" placeholder="70.0">
+                    </div>
+                    <div class="form-group">
+                        <label>Height (cm)</label>
+                        <input type="number" id="height" step="0.1" placeholder="170.0">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+    <label>Age (years)</label>
+    <input type="number" id="age" placeholder="Not set">
+    <button type="button" id="update-age-btn" class="btn-secondary" style="margin-top: 5px;">Update Age</button>
+</div>
+                    <div class="form-group">
+                        <label>Chest (cm)</label>
+                        <input type="number" id="chest" step="0.1" placeholder="95">
+                    </div>
+                    <div class="form-group">
+                        <label>Waist (cm)</label>
+                        <input type="number" id="waist" step="0.1" placeholder="80">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Hips (cm)</label>
+                        <input type="number" id="hips" step="0.1" placeholder="100">
+                    </div>
+                    <div class="form-group">
+                        <label>Arms (cm)</label>
+                        <input type="number" id="arms" step="0.1" placeholder="35">
+                    </div>
+                    <div class="form-group">
+                        <label>Thighs (cm)</label>
+                        <input type="number" id="thighs" step="0.1" placeholder="55">
+                    </div>
+                </div>
+            </form>
+
+            <h2>🎯 Step 3: Fitness Preferences</h2>
+            <form id="prefs-form">
+                <div class="form-group">
+                    <label>Fitness Goal</label>
+                    <select id="goal" required>
+                        <option value="">Select goal...</option>
+                        <option value="Weight Loss">🔥 Weight Loss</option>
+                        <option value="Muscle Gain">💪 Muscle Gain</option>
+                        <option value="General Fitness">🏃 General Fitness</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Workout Days per Week (1-7)</label>
+                    <input type="number" id="days" min="1" max="7" required>
+                    <small>How many days per week can you commit?</small>
+                </div>
+                <button type="submit" id="generate-program-btn" class="btn-primary" style="width: 100%; margin-top: 20px;">
+                    🚀 Generate / Update Program
+                </button>
+            </form>
+            <div id="setup-message" class="message" style="margin-top: 20px;"></div>
+        </div>
+    </div>
+
+    <style>
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+    </style>
+
+    <script>
+        // API Service
+        class APIService {
+            async request(url, method = 'GET', body = null) {
+                const options = { method, credentials: 'same-origin', headers: {} };
+                if (body) {
+                    options.headers['Content-Type'] = 'application/json';
+                    options.body = JSON.stringify(body);
+                }
+                try {
+                    const response = await fetch(url, options);
+                    return await response.json();
+                } catch (error) {
+                    console.error('API Error:', error);
+                    return { success: false, message: 'Network error.' };
+                }
+            }
+            get(url) { return this.request(url, 'GET'); }
+            post(url, body) { return this.request(url, 'POST', body); }
+        }
+        const api = new APIService();
+
+        // Load existing data on page load
+        async function loadExistingData() {
+            try {
+                // Load health data
+                const healthResult = await api.get('/api/profile/health-data');
+                if (healthResult.success && healthResult.data) {
+                    if (healthResult.data.heart_rate) document.getElementById('heart-rate').value = healthResult.data.heart_rate;
+                    if (healthResult.data.weight) document.getElementById('weight').value = healthResult.data.weight;
+                    if (healthResult.data.height) document.getElementById('height').value = healthResult.data.height;
+                }
+
+                // Load preferences
+                const prefsResult = await api.get('/api/profile/preferences');
+                if (prefsResult.success && prefsResult.data) {
+                    if (prefsResult.data.fitness_goal) document.getElementById('goal').value = prefsResult.data.fitness_goal;
+                    if (prefsResult.data.workout_days) document.getElementById('days').value = prefsResult.data.workout_days;
+                }
+
+                // Load latest measurement
+                const measResult = await api.get('/api/measurements/latest');
+                if (measResult.success && measResult.data) {
+                    if (measResult.data.chest) document.getElementById('chest').value = measResult.data.chest;
+                    if (measResult.data.waist) document.getElementById('waist').value = measResult.data.waist;
+                    if (measResult.data.hips) document.getElementById('hips').value = measResult.data.hips;
+                    if (measResult.data.arms) document.getElementById('arms').value = measResult.data.arms;
+                    if (measResult.data.thighs) document.getElementById('thighs').value = measResult.data.thighs;
+                }
+
+                // Load user age
+                const userResult = await api.get('/api/profile/info');
+                if (userResult.success && userResult.data.age) {
+                    document.getElementById('age').value = userResult.data.age;
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        // PDF Extraction
+        document.getElementById('extract-pdf-btn').addEventListener('click', async () => {
+            const pdfFile = document.getElementById('pdf-file').files[0];
+            if (!pdfFile) {
+                alert('Please select a PDF file first.');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('pdf_file', pdfFile);
+            const statusDiv = document.getElementById('pdf-extract-status');
+            statusDiv.innerHTML = '<span style="color: #667eea;">⏳ Extracting data...</span>';
+
+            try {
+                const response = await fetch('/api/pdf/extract', {
+                    method: 'POST',
+                    credentials: 'include',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    const data = result.data;
+                    if (data.heart_rate) document.getElementById('heart-rate').value = data.heart_rate;
+                    if (data.weight) document.getElementById('weight').value = data.weight;
+                    if (data.height) document.getElementById('height').value = data.height;
+                    if (data.age) document.getElementById('age').value = data.age;
+                    if (data.chest) document.getElementById('chest').value = data.chest;
+                    if (data.waist) document.getElementById('waist').value = data.waist;
+                    if (data.hips) document.getElementById('hips').value = data.hips;
+                    if (data.arms) document.getElementById('arms').value = data.arms;
+    if (data.thighs) document.getElementById('thighs').value = data.thighs;
+                    statusDiv.innerHTML = '<span style="color: #4caf50;">✅ Data extracted successfully! You can edit the values above.</span>';
+                } else {
+                    statusDiv.innerHTML = '<span style="color: #e74c3c;">❌ ' + (result.message || 'Extraction failed') + '</span>';
+                }
+            } catch (error) {
+                statusDiv.innerHTML = '<span style="color: #e74c3c;">❌ Error extracting data.</span>';
+            }
+        });
+
+        // Generate/Update Program
+        document.getElementById('prefs-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const goal = document.getElementById('goal').value;
+            const days = document.getElementById('days').value;
+            const heartRate = document.getElementById('heart-rate').value;
+            const weight = document.getElementById('weight').value;
+            const height = document.getElementById('height').value;
+            const age = document.getElementById('age').value;
+            const chest = document.getElementById('chest').value;
+            const waist = document.getElementById('waist').value;
+            const hips = document.getElementById('hips').value;
+            const arms = document.getElementById('arms').value;
+            const thighs = document.getElementById('thighs').value;
+
+            const formData = new FormData();
+            formData.append('goal', goal);
+            formData.append('days', days);
+            formData.append('heart_rate', heartRate);
+            formData.append('weight', weight);
+            formData.append('height', height);
+            formData.append('age', age);
+            formData.append('chest', chest);
+            formData.append('waist', waist);
+            formData.append('hips', hips);
+            formData.append('arms', arms);
+            formData.append('thighs', thighs);
+
+            const pdfFile = document.getElementById('pdf-file').files[0];
+            if (pdfFile) formData.append('pdf_file', pdfFile);
+
+            const msgDiv = document.getElementById('setup-message');
+            const btn = document.getElementById('generate-program-btn');
+            btn.disabled = true;
+            btn.textContent = 'Generating...';
+            msgDiv.innerHTML = '<span style="color: #667eea;">⏳ Creating your personalized program...</span>';
+            msgDiv.className = 'message';
+
+            try {
+                const response = await fetch('/api/program/generate-from-setup', {
+                    method: 'POST',
+                    credentials: 'include',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    msgDiv.innerHTML = '<span style="color: #4caf50;">✅ ' + result.message + '</span>';
+                    msgDiv.className = 'message success';
+                    setTimeout(() => {
+                        window.location.href = '/program';
+                    }, 1500);
+                } else {
+                    msgDiv.innerHTML = '<span style="color: #e74c3c;">❌ ' + (result.message || 'Generation failed') + '</span>';
+                    msgDiv.className = 'message error';
+                    btn.disabled = false;
+                    btn.textContent = '🚀 Generate / Update Program';
+                }
+            } catch (error) {
+                msgDiv.innerHTML = '<span style="color: #e74c3c;">❌ Network error. Please try again.</span>';
+                msgDiv.className = 'message error';
+                btn.disabled = false;
+                btn.textContent = '🚀 Generate / Update Program';
+            }
+        });
+
+        // Load existing data when page loads
+        loadExistingData();
+    </script>
+</body>
+</html>
