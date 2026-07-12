@@ -31,4 +31,4 @@ htmlcov/
 Thumbs.db
 reports/
 uploads/
-db_config.py/
+database/db_config.py
